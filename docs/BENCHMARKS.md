@@ -66,27 +66,46 @@ PYTHONPATH=src python benchmarks/compare_window_statistics.py \
 
 ## Operation-level records and plots
 
-`benchmarks/benchmark_operations.py` measures `add`, arbitrary removal plus
-replacement, oldest removal plus replacement, every aggregate property,
-median, and percentile-of-value separately for both Python implementations and
-all six window sizes. It writes reproducible metadata and median measurements
-to JSON and CSV, then creates a multi-panel logarithmic PNG plot:
+`benchmarks/benchmark_operations.py` discovers built engines and measures
+`add`, arbitrary removal plus replacement, oldest removal plus replacement,
+every aggregate property, median, percentile-of-value, and bulk addition at all
+six window sizes. It writes reproducible metadata and median measurements to
+JSON and CSV, then creates a multi-panel logarithmic PNG plot:
 
 ```shell
 python -m pip install '.[benchmark]'
 PYTHONPATH=src python benchmarks/benchmark_operations.py
 ```
 
-Outputs are stored under `benchmarks/results/`. Constant-time optimized queries
-run 100,000 iterations by default. Potentially linear NumPy operations use an
-adaptive iteration count targeting at least 10 million inspected window values
-and at least 100 calls. Each recorded row includes its actual iteration count
-so throughput and latency remain explicit. Each implementation/window/repeat
-runs in a fresh process; setup and initial filling occur before operation
-timing, while peak RSS describes the complete worker process.
+Outputs are stored under [`benchmarks/results/`](../benchmarks/results/).
+Constant-time optimized queries run 100,000 iterations by default. Potentially
+linear NumPy operations use an adaptive iteration count targeting at least 10
+million inspected window values and at least 100 calls. Each recorded row
+identifies `scalar_python_facade`, `bulk_python_facade`, or `worker_startup` and
+records its batch size and actual iteration count. Java and Scala startup is
+reported separately. Their `count` and `sum` properties use adapter-side
+caches; the remaining statistics measure worker round trips.
+
+Each implementation/window/repeat runs in a fresh process. Peak RSS includes
+the Python facade; for Java and Scala it also adds the live worker RSS sampled
+after timed operations. This is a complete runtime footprint sample, not a JVM
+heap-only figure or a high-frequency child-process peak trace.
 
 Regenerate the plot from recorded JSON without rerunning measurements:
 
 ```shell
 PYTHONPATH=src python benchmarks/benchmark_operations.py --plot-only
 ```
+
+Run one or more selected implementations and replace only their matching rows
+in the existing report with:
+
+```shell
+PYTHONPATH=src python benchmarks/benchmark_operations.py \
+  --implementations cython rust --update-existing
+```
+
+Incremental updates require the existing Python/platform identity, update
+count, linear-work target, and repeat count to match. Selected window sizes are
+replaced while all other backend/size rows are preserved. The JSON metadata
+records an incremental-update history.

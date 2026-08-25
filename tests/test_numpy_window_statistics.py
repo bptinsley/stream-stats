@@ -43,3 +43,13 @@ def test_numpy_clear_and_alias():
     baseline.clear()
     assert baseline.count == 0
     assert baseline.sum == 0.0
+
+
+def test_numpy_batch_snapshot_and_lifecycle():
+    baseline = NumpyWindowStatistics(2)
+    assert baseline.add_many([1, 2, 3]) == [None, None, 1.0]
+    assert baseline.snapshot().mean == 2.5
+    baseline.close()
+    assert baseline.closed
+    with pytest.raises(RuntimeError, match="closed"):
+        baseline.add(4)

@@ -39,7 +39,7 @@ Third-party distributions can register a factory through the
 ## `WindowStatistics`
 
 ```python
-WindowStatistics(window_size: int)
+WindowStatistics(window_size: int, *, backend: str = "python")
 ```
 
 Maintains exact statistics over a fixed-size window using a recycled,
@@ -47,9 +47,17 @@ index-addressed AVL multiset and cyclic arrival buffer.
 
 - `add(value)` adds a finite real value and returns the automatically evicted
   oldest value, or `None` before the window becomes full.
+- `add_many(values)` validates the complete batch, adds it, and returns one
+  optional eviction result per value. The Cython backend has a zero-copy input
+  path for contiguous native-endian double buffers such as `array('d')`,
+  compatible `memoryview` objects, and contiguous NumPy `float64` arrays.
 - `remove_oldest()` removes and returns the oldest value.
 - `remove(value)` removes the oldest matching occurrence.
 - `clear()` empties the window while retaining allocated storage.
+- `snapshot()` returns all constant-time aggregates in one immutable value and
+  is valid for an empty window.
+- `close()` deterministically releases native handles or worker processes;
+  engines also support `with` and expose `closed`.
 - `percentile(p)` returns the linear-interpolated percentile for `p` in
   `[0, 100]`.
 - `percentile_of(value)` returns the duplicate-aware midrank percentage.
@@ -58,6 +66,11 @@ Properties are `count`, `sum`, `min`, `max`, `mean`, `variance`, `std`, and
 `standard_deviation`. Variance and standard deviation are population
 statistics. Empty-window statistics raise `statistics.StatisticsError`, except
 `count` and `sum`, which return zero.
+
+Backend names are `python`, `cython`, `c`, `cpp`, `rust`, `go`, `java`, and
+`scala` when their local artifacts are built. `cython` is a compiled direct
+binding to the canonical C recycled-array core. `assembly` is reserved but
+unavailable until an optimized kernel clears its publication gate.
 
 ## `NumpyWindowStatistics`
 

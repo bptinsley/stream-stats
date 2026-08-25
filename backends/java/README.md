@@ -1,5 +1,5 @@
 # Java backend
 
-Long-lived worker process packaged as a JAR. The Python adapter owns one worker
-per backend instance and uses a versioned framed protocol, avoiding a JVM start
-for every sample.
+Independent primitive-array recycled AVL served by a long-lived JVM worker.
+The protocol is versioned, little-endian, request-ID checked, and
+length-prefixed. Build with `make -C backends/java test`.

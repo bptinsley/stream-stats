@@ -32,3 +32,16 @@ class WindowSnapshot(Mapping[str, float | int]):
 
     def as_dict(self) -> dict[str, float | int]:
         return dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class WindowStatisticsSnapshot:
+    """All constant-time statistics captured after one engine operation."""
+
+    count: int
+    sum: float
+    min: float | None
+    max: float | None
+    mean: float | None
+    variance: float | None
+    std: float | None

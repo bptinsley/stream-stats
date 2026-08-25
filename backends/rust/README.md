@@ -1,4 +1,6 @@
 # Rust backend
 
-Rust implementation exposed through PyO3 and built with maturin. Publish its
-factory as the `rust` entry point in the `stream_stats.backends` group.
+Safe Rust recycled-array AVL with native tests, invariant validation, and an
+optional canonical C-ABI build used by the dependency-free Python adapter.
+Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, and
+`cargo build --release` in this directory.

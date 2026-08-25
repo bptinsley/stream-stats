@@ -5,13 +5,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ._api import Window
-from ._models import WindowSnapshot
+from ._models import WindowSnapshot, WindowStatisticsSnapshot
 from ._window_statistics import WindowStatistics
 from .backends import (
     BackendInfo,
     BackendUnavailableError,
+    BackendWorkerError,
     get_backend_info,
     list_backends,
+)
+from .window_statistics_backends import (
+    get_window_statistics_backend_info,
+    list_window_statistics_backends,
+    register_window_statistics_backend,
 )
 
 if TYPE_CHECKING:
@@ -20,11 +26,16 @@ if TYPE_CHECKING:
 __all__ = [
     "BackendInfo",
     "BackendUnavailableError",
+    "BackendWorkerError",
     "Window",
     "WindowStatistics",
+    "WindowStatisticsSnapshot",
     "WindowSnapshot",
     "get_backend_info",
+    "get_window_statistics_backend_info",
     "list_backends",
+    "list_window_statistics_backends",
+    "register_window_statistics_backend",
 ]
 
 
