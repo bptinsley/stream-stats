@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Iterable
 from statistics import StatisticsError
+
+from ._models import WindowStatisticsSnapshot
 
 
 def _aggregate_sum(values: tuple[float, ...]) -> float:
@@ -31,7 +34,7 @@ def _finite_float(value: float) -> float:
         raise TypeError("values must be real numbers") from exc
     if not math.isfinite(number):
         raise ValueError("values must be finite numbers")
-    return number
+    return 0.0 if number == 0.0 else number
 
 
 class _IndexedAVL:
@@ -395,8 +398,10 @@ class _IndexedAVL:
             raise AssertionError("distinct count is invalid")
 
 
-class WindowStatistics:
+class _PythonWindowStatisticsEngine:
     """Exact statistics over a fixed-size window using a recycled AVL pool."""
+
+    name = "python"
 
     def __init__(self, window_size: int) -> None:
         size = _positive_window_size(window_size)
@@ -407,8 +412,14 @@ class WindowStatistics:
         self._ring = ring
         self._head = 0
         self._length = 0
+        self._closed = False
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("window statistics engine is closed")
 
     def add(self, value: float) -> float | None:
+        self._ensure_open()
         number = _finite_float(value)
         if self._length < self.window_size:
             self._tree.insert(number)
@@ -428,6 +439,11 @@ class WindowStatistics:
         self._head = (self._head + 1) % self.window_size
         return outgoing
 
+    def add_many(self, values: Iterable[float]) -> list[float | None]:
+        self._ensure_open()
+        normalized = tuple(_finite_float(value) for value in values)
+        return [self.add(value) for value in normalized]
+
     def remove_oldest(self) -> float:
         self._require_values()
         outgoing = self._ring[self._head]
@@ -439,6 +455,7 @@ class WindowStatistics:
         return outgoing
 
     def remove(self, value: float) -> None:
+        self._ensure_open()
         number = _finite_float(value)
         match = -1
         for logical in range(self._length):
@@ -459,20 +476,24 @@ class WindowStatistics:
             self._head = 0
 
     def clear(self) -> None:
+        self._ensure_open()
         self._tree.clear()
         self._head = 0
         self._length = 0
 
     def _require_values(self) -> None:
+        self._ensure_open()
         if self._length == 0:
             raise StatisticsError("no values in the window")
 
     @property
     def count(self) -> int:
+        self._ensure_open()
         return self._length
 
     @property
     def sum(self) -> float:
+        self._ensure_open()
         return self._tree.total
 
     @property
@@ -535,6 +556,40 @@ class WindowStatistics:
         less, equal = self._tree.counts_around(number)
         return 100.0 * (less + 0.5 * equal) / self._length
 
+    def snapshot(self) -> WindowStatisticsSnapshot:
+        self._ensure_open()
+        if self._length == 0:
+            return WindowStatisticsSnapshot(0, 0.0, None, None, None, None, None)
+        variance = self.variance
+        return WindowStatisticsSnapshot(
+            count=self._length,
+            sum=self._tree.total,
+            min=self._tree.minimum,
+            max=self._tree.maximum,
+            mean=self._tree.mean,
+            variance=variance,
+            std=math.sqrt(variance),
+        )
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._tree.clear()
+        self._head = 0
+        self._length = 0
+        self._closed = True
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def __enter__(self):
+        self._ensure_open()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
     def _values_in_order(self) -> list[float]:
         return [
             self._ring[(self._head + logical) % self.window_size]
@@ -542,6 +597,7 @@ class WindowStatistics:
         ]
 
     def _validate(self) -> None:
+        self._ensure_open()
         self._tree.validate()
         if not 0 <= self._length <= self.window_size:
             raise AssertionError("ring length is invalid")
@@ -553,3 +609,92 @@ class WindowStatistics:
             raise AssertionError("ring and tree contain different values")
         if self._tree.count != self._length:
             raise AssertionError("ring and tree counts differ")
+
+
+class WindowStatistics:
+    """Backend-neutral facade for exact fixed-window statistics."""
+
+    def __init__(self, window_size: int, *, backend: str = "python") -> None:
+        from .window_statistics_backends import create_window_statistics_engine
+
+        self.backend_name = backend.strip().lower()
+        self._engine = create_window_statistics_engine(
+            self.backend_name, window_size
+        )
+        self.window_size = self._engine.window_size
+
+    def add(self, value: float) -> float | None:
+        return self._engine.add(value)
+
+    def add_many(self, values: Iterable[float]) -> list[float | None]:
+        return self._engine.add_many(values)
+
+    def remove_oldest(self) -> float:
+        return self._engine.remove_oldest()
+
+    def remove(self, value: float) -> None:
+        self._engine.remove(value)
+
+    def clear(self) -> None:
+        self._engine.clear()
+
+    def snapshot(self) -> WindowStatisticsSnapshot:
+        return self._engine.snapshot()
+
+    @property
+    def count(self) -> int:
+        return self._engine.count
+
+    @property
+    def sum(self) -> float:
+        return self._engine.sum
+
+    @property
+    def min(self) -> float:
+        return self._engine.min
+
+    @property
+    def max(self) -> float:
+        return self._engine.max
+
+    @property
+    def mean(self) -> float:
+        return self._engine.mean
+
+    @property
+    def variance(self) -> float:
+        return self._engine.variance
+
+    @property
+    def std(self) -> float:
+        return self._engine.std
+
+    @property
+    def standard_deviation(self) -> float:
+        return self._engine.std
+
+    def percentile(self, percentile: float) -> float:
+        return self._engine.percentile(percentile)
+
+    def percentile_of(self, value: float) -> float:
+        return self._engine.percentile_of(value)
+
+    def close(self) -> None:
+        self._engine.close()
+
+    @property
+    def closed(self) -> bool:
+        return self._engine.closed
+
+    def __enter__(self):
+        if self.closed:
+            raise RuntimeError("window statistics engine is closed")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+    def __getattr__(self, name: str):
+        if name.startswith("_") and name != "_engine":
+            return getattr(self._engine, name)
+        raise AttributeError(name)

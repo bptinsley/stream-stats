@@ -15,6 +15,10 @@ class BackendUnavailableError(RuntimeError):
     """Raised when a configured backend is known but not installed or built."""
 
 
+class BackendWorkerError(RuntimeError):
+    """Raised when a process-backed backend fails or violates its protocol."""
+
+
 @dataclass(frozen=True, slots=True)
 class BackendInfo:
     name: str

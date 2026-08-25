@@ -1,46 +1,69 @@
-# Backend contract
+# Window statistics backend contract
 
-Every backend must preserve the Python API's observable behavior. Given a
-window size and ordered statistic names, its factory returns an isolated,
-stateful object with:
+The public `WindowStatistics` facade always returns the same Python type and
+delegates to an engine selected with `backend=`. Engines implement scalar and
+bulk mutation, removal, clear, one-call snapshot, exact percentiles and
+percentile rank, deterministic close, and context-manager cleanup. Inputs are
+finite normalized binary64 values; duplicate values use midrank semantics.
 
-```python
-name: str
-push(value: float) -> Mapping[str, float | int]
-reset() -> None
+Plugins register factories in `stream_stats.window_statistics`. Local builds
+are discovered directly from their standard workspace artifact paths. Missing
+artifacts raise `BackendUnavailableError` and never fall back to Python.
+
+| Backend | Storage | Python bridge | Local artifact |
+|---|---|---|---|
+| `python` | recycled Python parallel arrays | direct | built in |
+| `cython` | canonical recycled C arrays | direct Cython extension | extension module |
+| `numpy` | copied NumPy array baseline | explicitly named class | optional dependency |
+| `c` | recycled C arrays | stable C ABI via `ctypes` | shared library |
+| `cpp` | pre-sized `std::vector` arrays | stable C ABI via `ctypes` | shared library |
+| `rust` | pre-sized safe `Vec` arrays | stable C ABI via `ctypes` | shared library |
+| `go` | pre-sized primitive slices | c-shared ABI and `cgo.Handle` | shared library |
+| `java` | primitive JVM arrays | framed persistent worker | runnable JAR |
+| `scala` | primitive JVM arrays | same framing, independent core | class artifact |
+| `assembly` | performance-gated C/assembly hybrid | not published | none |
+
+Native libraries implement ABI version 1 from
+`backends/c/include/stream_stats_window.h`. The Go library exposes compatible
+symbols but stores only opaque integer handles across cgo. Native adapters own
+exactly one handle, reject inherited post-fork use, and close idempotently.
+ABI version 1 also provides narrow `count`, `sum`, `min`, and `max` getters so
+an adapter does not have to construct a complete snapshot for one scalar.
+The Python adapters maintain synchronized `count` and `sum` caches after each
+successful mutation; Java and Scala therefore answer those properties without
+a worker round trip.
+The Cython extension compiles the same C source directly into its extension,
+removing `ctypes` dispatch and Python snapshot-object overhead from scalar
+properties while retaining the canonical algorithm and conformance behavior.
+Its bulk path reuses grow-only input, eviction, and flag buffers and consumes
+contiguous native-endian double buffers through the Python buffer protocol
+without copying or per-item Python conversion.
+
+Java and Scala use a fixed little-endian, length-prefixed protocol. Every frame
+has a request ID and status. The Python owner enforces startup, request, and
+shutdown timeouts; rejects malformed, mismatched, truncated, or EOF responses;
+does not replay mutations; and terminates failed workers.
+
+## Build and test
+
+From the repository root:
+
+```sh
+make build-backends
+make test-backends
+.venv/bin/python -m pytest
 ```
 
-The result of `push` contains each requested statistic. A backend may include
-`count`; otherwise the Python facade supplies it. Inputs have already been
-converted to finite IEEE-754 doubles. Population variance is defined as
-`sum((x - mean) ** 2) / count`.
-
-Python plugins expose a factory using this entry point:
-
-```toml
-[project.entry-points."stream_stats.backends"]
-rust = "stream_stats_rust:create_backend"
-```
-
-## Language integration
-
-| Workspace | Intended bridge | Artifact |
-|---|---|---|
-| `assembly` | C ABI loaded by a thin Python extension | shared library |
-| `c` | CPython limited API or CFFI | extension/shared library |
-| `cpp` | pybind11 | extension module |
-| `rust` | PyO3/maturin | extension module/wheel |
-| `go` | cgo `c-shared` plus Python adapter | shared library |
-| `java` | persistent binary/JSON-lines worker | JAR |
-| `scala` | persistent binary/JSON-lines worker | JAR |
-
-Each adapter must release the GIL while performing backend-only batch work
-where its bridge permits it. It must not silently fall back to Python: an
-unavailable compiled artifact is an explicit configuration error.
+The aggregate build currently targets macOS arm64/Homebrew defaults. Individual
+workspace README files describe their direct commands. Generated artifacts
+remain untracked. Run `list_window_statistics_backends()` after building to
+confirm discovery.
 
 ## Correctness gate
 
-Before inclusion in comparative benchmarks, every implementation must run the
-shared conformance vectors against the Python backend. Exact integers and
-`count` must match; floating-point statistics use a documented relative and
-absolute tolerance.
+`conformance/window_statistics.json` is language-neutral and uses hexadecimal
+binary64 inputs with independently recorded decimal expectations. Every
+available engine is parametrized through the same Python conformance test.
+Native tests additionally exercise each language core and recycled storage.
+Counts, errors, and eviction order match exactly; documented tolerances apply
+to floating-point reassociation differences.

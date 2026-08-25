@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "float_format": "IEEE-754 binary64 hexadecimal",
+  "default_tolerance": {"absolute": "1e-12", "relative": "1e-12"},
+  "vectors": [
+    {
+      "name": "basic_wraparound_and_percentiles",
+      "window_size": 3,
+      "commands": [
+        {"operation": "snapshot", "expected": {"count": 0, "sum": "0", "min": null, "max": null, "mean": null, "variance": null, "std": null}},
+        {"operation": "add", "value": "0x1.0000000000000p+0", "evicted": null},
+        {"operation": "add", "value": "0x1.0000000000000p+1", "evicted": null},
+        {"operation": "add", "value": "0x1.8000000000000p+1", "evicted": null},
+        {"operation": "snapshot", "expected": {"count": 3, "sum": "6", "min": "1", "max": "3", "mean": "2", "variance": "0.6666666666666666666666666667", "std": "0.8164965809277260327324280249"}},
+        {"operation": "percentile", "argument": "25", "expected": "1.5"},
+        {"operation": "percentile_of", "argument": "0x1.0000000000000p+1", "expected": "50"},
+        {"operation": "add", "value": "0x1.0000000000000p+2", "evicted": "0x1.0000000000000p+0"},
+        {"operation": "snapshot", "expected": {"count": 3, "sum": "9", "min": "2", "max": "4", "mean": "3", "variance": "0.6666666666666666666666666667", "std": "0.8164965809277260327324280249"}}
+      ]
+    },
+    {
+      "name": "duplicates_and_arbitrary_removal",
+      "window_size": 5,
+      "commands": [
+        {"operation": "add_many", "values": ["0x1.0000000000000p+0", "0x1.0000000000000p+1", "0x1.0000000000000p+1", "0x1.0000000000000p+2", "0x1.2000000000000p+3"], "evicted": [null, null, null, null, null]},
+        {"operation": "percentile", "argument": "50", "expected": "2"},
+        {"operation": "percentile_of", "argument": "0x1.0000000000000p+1", "expected": "40"},
+        {"operation": "remove", "value": "0x1.0000000000000p+1"},
+        {"operation": "snapshot", "expected": {"count": 4, "sum": "16", "min": "1", "max": "9", "mean": "4", "variance": "9.5", "std": "3.082207001484488225125096191"}},
+        {"operation": "remove_oldest", "expected": "0x1.0000000000000p+0"}
+      ]
+    },
+    {
+      "name": "signed_zero_normalization",
+      "window_size": 1,
+      "commands": [
+        {"operation": "add", "value": "-0x0.0p+0", "evicted": null},
+        {"operation": "snapshot", "expected": {"count": 1, "sum": "0", "min": "0", "max": "0", "mean": "0", "variance": "0", "std": "0"}},
+        {"operation": "remove_oldest", "expected": "0x0.0p+0"}
+      ]
+    },
+    {
+      "name": "large_offset_centered_variance",
+      "window_size": 4,
+      "commands": [
+        {"operation": "add_many", "values": ["0x1.dcd6500000000p+29", "0x1.dcd6500800000p+29", "0x1.dcd6501000000p+29", "0x1.dcd6501800000p+29"], "evicted": [null, null, null, null]},
+        {"operation": "snapshot", "expected": {"count": 4, "sum": "4000000006", "min": "1000000000", "max": "1000000003", "mean": "1000000001.5", "variance": "1.25", "std": "1.118033988749894848204586834"}}
+      ]
+    },
+    {
+      "name": "errors",
+      "window_size": 2,
+      "commands": [
+        {"operation": "mean", "expected_error": "empty"},
+        {"operation": "remove", "value": "0x1.0000000000000p+0", "expected_error": "not_found"},
+        {"operation": "percentile", "argument": "101", "expected_error": "invalid_argument", "requires_nonempty": true}
+      ]
+    }
+  ]
+}

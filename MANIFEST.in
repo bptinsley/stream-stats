@@ -1,0 +1,3 @@
+include src/stream_stats/_cython_native.pyx
+include backends/c/include/stream_stats_window.h
+include backends/c/src/stream_stats_window.c
