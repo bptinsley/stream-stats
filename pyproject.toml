@@ -1,0 +1,43 @@
+[project]
+name = "stream-stats"
+version = "0.1.0"
+description = "Efficient windowed statistics for streaming and iterated data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "stream-stats contributors"}]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python :: 3",
+  "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+baseline = ["numpy>=2.0"]
+benchmark = ["numpy>=2.0", "matplotlib>=3.9"]
+
+[project.scripts]
+stream-stats = "stream_stats.cli:main"
+
+[project.entry-points."stream_stats.backends"]
+# Third-party packages register backend factories in this group.
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+stream_stats = ["py.typed"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
